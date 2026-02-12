@@ -26,18 +26,32 @@ export default function ForgeApp({ imagePaths }) {
     }
 
     let mounted = true;
-    Promise.all(imagePaths.map(loadImage)).then((images) => {
+
+    async function bootstrapImages() {
+      const first = await loadImage(imagePaths[0]);
       if (!mounted) return;
-      const valid = images.filter(Boolean);
-      setLoadedImages(valid);
-      if (!valid.length) {
+
+      const initial = first ? [first] : [];
+      if (initial.length) {
+        setLoadedImages(initial);
+        setEdition(createEdition(initial));
+        setStatus("Loaded first image. Loading remaining assets...");
+      }
+
+      const rest = await Promise.all(imagePaths.slice(1).map(loadImage));
+      if (!mounted) return;
+
+      const all = [...initial, ...rest.filter(Boolean)];
+      if (!all.length) {
         setStatus("Could not load Pancho assets.");
         return;
       }
-      const first = createEdition(valid);
-      setEdition(first);
-      setStatus(`${valid.length} Pancho assets loaded. Hit Generate to keep rolling.`);
-    });
+
+      setLoadedImages(all);
+      setStatus(`${all.length} Pancho assets ready.`);
+    }
+
+    bootstrapImages();
 
     return () => {
       mounted = false;
