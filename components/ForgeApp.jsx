@@ -31,7 +31,7 @@ export default function ForgeApp({ imagePaths }) {
       const first = await loadImage(imagePaths[0]);
       if (!mounted) return;
 
-      const initial = first ? [first] : [];
+      const initial = first && isLikelyTransparentCutout(first) ? [first] : [];
       if (initial.length) {
         setLoadedImages(initial);
         setEdition(createEdition(initial));
@@ -41,7 +41,7 @@ export default function ForgeApp({ imagePaths }) {
       const rest = await Promise.all(imagePaths.slice(1).map(loadImage));
       if (!mounted) return;
 
-      const all = [...initial, ...rest.filter(Boolean)];
+      const all = [...initial, ...rest.filter(Boolean).filter(isLikelyTransparentCutout)];
       if (!all.length) {
         setStatus("Could not load Pancho assets.");
         return;
@@ -203,4 +203,38 @@ function loadImage(src) {
     image.onerror = () => resolve(null);
     image.src = src;
   });
+}
+
+function isLikelyTransparentCutout(image) {
+  const sampleCanvas = document.createElement("canvas");
+  sampleCanvas.width = image.naturalWidth || image.width;
+  sampleCanvas.height = image.naturalHeight || image.height;
+  const sampleCtx = sampleCanvas.getContext("2d");
+  if (!sampleCtx) return true;
+
+  sampleCtx.drawImage(image, 0, 0);
+
+  const w = sampleCanvas.width;
+  const h = sampleCanvas.height;
+  if (w < 4 || h < 4) return true;
+
+  // Sample corners and near-corners; baked backgrounds usually keep alpha > 0 here.
+  const points = [
+    [0, 0],
+    [w - 1, 0],
+    [0, h - 1],
+    [w - 1, h - 1],
+    [Math.floor(w * 0.03), Math.floor(h * 0.03)],
+    [Math.floor(w * 0.97), Math.floor(h * 0.03)],
+    [Math.floor(w * 0.03), Math.floor(h * 0.97)],
+    [Math.floor(w * 0.97), Math.floor(h * 0.97)]
+  ];
+
+  let opaqueEdgeSamples = 0;
+  for (const [x, y] of points) {
+    const alpha = sampleCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data[3];
+    if (alpha > 8) opaqueEdgeSamples += 1;
+  }
+
+  return opaqueEdgeSamples < 3;
 }
